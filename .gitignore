@@ -14,10 +14,6 @@ venv/
 .idea/
 *.swp
 
-# --- Local Databases / Cache ---
-
-*.sqlite3
-*.db
 
 # --- OS Files ---
 .DS_Store
