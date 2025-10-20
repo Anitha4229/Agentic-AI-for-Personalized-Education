@@ -1,0 +1,2 @@
+invalid type: string "28  \n \nFigure 4-3 Sequence Diagram for Vendors Module \n4.1.3 Activity Diagram \nActivity diagram is another important diagram in UML to describe dynamic \naspects of the system. Activity diagram is basically a flow chart to represent the flow \nform one activity to another activity. The activity can be described as an operation of \nan object -oriented 
+rd", expected f64 

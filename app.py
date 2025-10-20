@@ -10,9 +10,6 @@ from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import Tool
 from langchain import hub
 
-# --- IMPORTANT: Import your ingest script ---
-import ingest 
-
 # Load environment variables for local development
 load_dotenv()
 
@@ -23,7 +20,7 @@ PERSIST_DIRECTORY = 'db'
 def get_api_key():
     # Try Streamlit secrets first (for cloud deployment)
     try:
-        return st.secrets["GEMINI_API_KEY"]
+        return st.secrets["GEMINI_API_key"]
     except KeyError:
         # Fall back to environment variable (for local development)
         return os.getenv("GEMINI_API_KEY")
@@ -31,10 +28,15 @@ def get_api_key():
 @st.cache_resource
 def setup_agent():
     """
-    Sets up the LangChain agent and necessary components.
-    This function assumes the database in PERSIST_DIRECTORY already exists.
+    Sets up the LangChain agent.
+    This function assumes the database in PERSIST_DIRECTORY already exists in the repository.
     """
     print("Setting up agent...")
+
+    # Check if the database directory exists. If not, show an error.
+    if not os.path.exists(PERSIST_DIRECTORY):
+        st.error("Knowledge Base not found. Please upload your 'db' folder to the GitHub repository.")
+        st.stop()
     
     # Setup embeddings and vector database
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -74,56 +76,39 @@ def setup_agent():
 
 st.title("🎓 Personalized Learning Path Generator")
 
-# Check if the knowledge base exists. If not, build it.
-if not os.path.exists(PERSIST_DIRECTORY):
-    st.info("First-time setup: Knowledge Base not found. Building it now...")
-    st.write("This may take a minute. Please wait.")
-    
-    with st.spinner("Processing documents and creating vector store..."):
-        try:
-            # --- This calls your ingest.py script ---
-            ingest.ingest_data() # IMPORTANT: Assumes your ingest script has a main() function
-            st.success("Knowledge Base built successfully!")
-            st.write("The app will now reload to use the new Knowledge Base.")
-            # Reload the app to reflect the changes
-            st.experimental_rerun()
-        except Exception as e:
-            st.error(f"Error during Knowledge Base creation: {e}")
-            st.stop()
+try:
+    # Directly set up the agent, assuming the 'db' folder is included in the deployment
+    agent_executor = setup_agent()
+    st.success("AI Agent is ready. Please provide your details below.")
+    st.write("This AI agent will create a custom study plan based on your course materials and learning goals.")
 
-# If the knowledge base exists, run the main app
-else:
-    try:
-        agent_executor = setup_agent()
-        st.write("This AI agent will create a custom study plan based on your course materials and learning goals.")
+    # --- User Input Form ---
+    with st.form("study_plan_form"):
+        learning_style = st.text_input("Describe your learning style (e.g., 'I'm a visual learner, I need examples')")
+        exam_topic = st.text_input("What is the exam topic or subject?", "Introduction to AI")
+        time_frame = st.text_input("How long until your exam? (e.g., '3 Days', '1 Week')", "3 Days")
+        weak_topics = st.text_area("List your weakest topics (one per line)", "Neural Networks\nReinforcement Learning")
+        
+        submitted = st.form_submit_button("Generate My Study Plan")
 
-        # --- User Input Form ---
-        with st.form("study_plan_form"):
-            learning_style = st.text_input("Describe your learning style (e.g., 'I'm a visual learner, I need examples')")
-            exam_topic = st.text_input("What is the exam topic or subject?", "Introduction to AI")
-            time_frame = st.text_input("How long until your exam? (e.g., '3 Days', '1 Week')", "3 Days")
-            weak_topics = st.text_area("List your weakest topics (one per line)", "Neural Networks\nReinforcement Learning")
-            
-            submitted = st.form_submit_button("Generate My Study Plan")
+        if submitted:
+            if not learning_style or not exam_topic or not weak_topics:
+                st.error("Please fill in all the fields before generating a plan.")
+            else:
+                prompt = f"""
+                Create a personalized study plan for an exam on '{exam_topic}' which is in {time_frame}.
+                My learning style is: '{learning_style}'.
+                My weakest topics are: {weak_topics}.
+                Using the 'Course Material Q&A System' tool, please structure a detailed plan. For each weak topic,
+                identify the core concepts from the documents and create two simple, practical questions to test my understanding.
+                The final output should be a well-formatted markdown plan.
+                """
+                with st.spinner("The AI agent is crafting your personalized plan..."):
+                    try:
+                        response = agent_executor.invoke({"input": prompt})
+                        st.markdown(response['output'])
+                    except Exception as e:
+                        st.error(f"An error occurred while generating the plan: {e}")
 
-            if submitted:
-                if not learning_style or not exam_topic or not weak_topics:
-                    st.error("Please fill in all the fields before generating a plan.")
-                else:
-                    prompt = f"""
-                    Create a personalized study plan for an exam on '{exam_topic}' which is in {time_frame}.
-                    My learning style is: '{learning_style}'.
-                    My weakest topics are: {weak_topics}.
-                    Using the 'Course Material Q&A System' tool, please structure a detailed plan. For each weak topic,
-                    identify the core concepts from the documents and create two simple, practical questions to test my understanding.
-                    The final output should be a well-formatted markdown plan.
-                    """
-                    with st.spinner("The AI agent is crafting your personalized plan..."):
-                        try:
-                            response = agent_executor.invoke({"input": prompt})
-                            st.markdown(response['output'])
-                        except Exception as e:
-                            st.error(f"An error occurred while generating the plan: {e}")
-
-    except Exception as e:
-        st.error(f"An error occurred during agent setup: {e}")
+except Exception as e:
+    st.error(f"An error occurred during agent setup: {e}")
